@@ -1,0 +1,215 @@
+services:
+  # ============ 1. MQTT BROKER ============
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: mosquitto
+    restart: unless-stopped
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./mosquitto/config/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mosquitto-data:/mosquitto/data
+    networks:
+      - coldchain-net
+
+  # ============ 2. REDIS (state store) ============
+  redis:
+    image: redis:7
+    container_name: redis
+    restart: unless-stopped
+    # chỉ dùng nội bộ, không cần map ra host; bỏ comment dưới nếu muốn debug
+    # ports:
+    #   - "6379:6379"
+    networks:
+      - coldchain-net
+
+  # ============ 3. INFLUXDB (time-series DB) ============
+  influxdb:
+    image: influxdb:2.7
+    container_name: influxdb
+    restart: unless-stopped
+    ports:
+      - "8086:8086"
+    environment:
+      DOCKER_INFLUXDB_INIT_MODE: setup
+      DOCKER_INFLUXDB_INIT_USERNAME: ${INFLUXDB_USERNAME}
+      DOCKER_INFLUXDB_INIT_PASSWORD: ${INFLUXDB_PASSWORD}
+      DOCKER_INFLUXDB_INIT_ORG: ${INFLUXDB_ORG}
+      DOCKER_INFLUXDB_INIT_BUCKET: ${INFLUXDB_BUCKET}
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: ${INFLUXDB_TOKEN}
+    volumes:
+      - influxdb-data:/var/lib/influxdb2
+    networks:
+      - coldchain-net
+
+  # ============ 4. GRAFANA (dashboard) ============
+  grafana:
+    image: grafana/grafana:10.4.3
+    container_name: grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GF_SECURITY_ADMIN_USER}
+      GF_SECURITY_ADMIN_PASSWORD: ${GF_SECURITY_ADMIN_PASSWORD}
+      # truyền biến InfluxDB cho file provisioning datasource dùng ${...}
+      INFLUXDB_URL: ${INFLUXDB_URL}
+      INFLUXDB_ORG: ${INFLUXDB_ORG}
+      INFLUXDB_BUCKET: ${INFLUXDB_BUCKET}
+      INFLUXDB_TOKEN: ${INFLUXDB_TOKEN}
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      - influxdb
+    networks:
+      - coldchain-net
+
+  # ============ 5-7. SHIPMENT DEVICES (3 cảm biến ảo) ============
+  shipment-device-01:
+    build: ./shipment-device
+    container_name: shipment-device-01
+    restart: unless-stopped
+    environment:
+      MQTT_BROKER: ${MQTT_BROKER}
+      MQTT_PORT: ${MQTT_PORT}
+      SHIPMENT_ID: shipment-01
+      DEVICE_ID: device-01
+      SCENARIO: temp_rising         # kịch bản: nhiệt độ tăng dần (R1+R2)
+      TELEMETRY_INTERVAL: ${TELEMETRY_INTERVAL}
+    depends_on:
+      - mosquitto
+    networks:
+      - coldchain-net
+
+  shipment-device-02:
+    build: ./shipment-device
+    container_name: shipment-device-02
+    restart: unless-stopped
+    environment:
+      MQTT_BROKER: ${MQTT_BROKER}
+      MQTT_PORT: ${MQTT_PORT}
+      SHIPMENT_ID: shipment-02
+      DEVICE_ID: device-02
+      SCENARIO: door_open           # kịch bản: cửa mở (R3)
+      TELEMETRY_INTERVAL: ${TELEMETRY_INTERVAL}
+    depends_on:
+      - mosquitto
+    networks:
+      - coldchain-net
+
+  shipment-device-03:
+    build: ./shipment-device
+    container_name: shipment-device-03
+    restart: unless-stopped
+    environment:
+      MQTT_BROKER: ${MQTT_BROKER}
+      MQTT_PORT: ${MQTT_PORT}
+      SHIPMENT_ID: shipment-03
+      DEVICE_ID: device-03
+      SCENARIO: battery_drain       # kịch bản: pin cạn + offline (R4+R5)
+      TELEMETRY_INTERVAL: ${TELEMETRY_INTERVAL}
+    depends_on:
+      - mosquitto
+    networks:
+      - coldchain-net
+
+  # ============ 8-10? COOLING ACTUATORS (3 bộ làm lạnh ảo) ============
+  cooling-actuator-01:
+    build: ./cooling-actuator
+    container_name: cooling-actuator-01
+    restart: unless-stopped
+    environment:
+      MQTT_BROKER: ${MQTT_BROKER}
+      MQTT_PORT: ${MQTT_PORT}
+      SHIPMENT_ID: shipment-01
+      STATUS_HEARTBEAT: ${STATUS_HEARTBEAT}
+    depends_on:
+      - mosquitto
+    networks:
+      - coldchain-net
+
+  cooling-actuator-02:
+    build: ./cooling-actuator
+    container_name: cooling-actuator-02
+    restart: unless-stopped
+    environment:
+      MQTT_BROKER: ${MQTT_BROKER}
+      MQTT_PORT: ${MQTT_PORT}
+      SHIPMENT_ID: shipment-02
+      STATUS_HEARTBEAT: ${STATUS_HEARTBEAT}
+    depends_on:
+      - mosquitto
+    networks:
+      - coldchain-net
+
+  cooling-actuator-03:
+    build: ./cooling-actuator
+    container_name: cooling-actuator-03
+    restart: unless-stopped
+    environment:
+      MQTT_BROKER: ${MQTT_BROKER}
+      MQTT_PORT: ${MQTT_PORT}
+      SHIPMENT_ID: shipment-03
+      STATUS_HEARTBEAT: ${STATUS_HEARTBEAT}
+    depends_on:
+      - mosquitto
+    networks:
+      - coldchain-net
+
+  # ============ GATEWAY (bộ não: rule engine + ghi dữ liệu) ============
+  coldchain-gateway:
+    build: ./coldchain-gateway
+    container_name: coldchain-gateway
+    restart: unless-stopped
+    environment:
+      MQTT_BROKER: ${MQTT_BROKER}
+      MQTT_PORT: ${MQTT_PORT}
+      INFLUXDB_URL: ${INFLUXDB_URL}
+      INFLUXDB_ORG: ${INFLUXDB_ORG}
+      INFLUXDB_BUCKET: ${INFLUXDB_BUCKET}
+      INFLUXDB_TOKEN: ${INFLUXDB_TOKEN}
+      REDIS_HOST: ${REDIS_HOST}
+      REDIS_PORT: ${REDIS_PORT}
+      TEMP_MAX: ${TEMP_MAX}
+      TEMP_VIOLATION_CYCLES: ${TEMP_VIOLATION_CYCLES}
+      DOOR_OPEN_CYCLES: ${DOOR_OPEN_CYCLES}
+      BATTERY_MIN: ${BATTERY_MIN}
+      OFFLINE_TIMEOUT: ${OFFLINE_TIMEOUT}
+      OFFLINE_CHECK_INTERVAL: ${OFFLINE_CHECK_INTERVAL}
+      EVENTS_KEEP: ${EVENTS_KEEP}
+      LOG_LEVEL: ${LOG_LEVEL}
+    depends_on:
+      - mosquitto
+      - influxdb
+      - redis
+    networks:
+      - coldchain-net
+
+  # ============ REST API (FastAPI) ============
+  coldchain-api:
+    build: ./coldchain-api
+    container_name: coldchain-api
+    restart: unless-stopped
+    ports:
+      - "${API_PORT}:8000"
+    environment:
+      REDIS_HOST: ${REDIS_HOST}
+      REDIS_PORT: ${REDIS_PORT}
+      MQTT_BROKER: ${MQTT_BROKER}
+      MQTT_PORT: ${MQTT_PORT}
+    depends_on:
+      - redis
+      - mosquitto
+    networks:
+      - coldchain-net
+
+# ============ NETWORK & VOLUMES ============
+networks:
+  coldchain-net:
+    driver: bridge
+
+volumes:
+  mosquitto-data:
+  influxdb-data:
+  grafana-data:
