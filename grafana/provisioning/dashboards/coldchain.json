@@ -1,0 +1,168 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "5s",
+  "time": { "from": "now-1h", "to": "now" },
+  "title": "Cold-chain Monitoring",
+  "uid": "coldchain-main",
+  "tags": ["coldchain", "iot"],
+  "templating": { "list": [] },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Nhiệt độ theo shipment (°C)",
+      "type": "timeseries",
+      "datasource": { "type": "influxdb", "uid": "coldchain_influx" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "celsius",
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10 },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 8 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": { "tooltip": { "mode": "multi" }, "legend": { "displayMode": "table", "placement": "bottom" } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "influxdb", "uid": "coldchain_influx" },
+          "query": "from(bucket: \"coldchain\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"telemetry\" and r._field == \"temperature\") |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false) |> group(columns: [\"shipment_id\"])"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Độ ẩm theo shipment (%)",
+      "type": "timeseries",
+      "datasource": { "type": "influxdb", "uid": "coldchain_influx" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "humidity", "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10 } }, "overrides": [] },
+      "options": { "tooltip": { "mode": "multi" }, "legend": { "displayMode": "list", "placement": "bottom" } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "influxdb", "uid": "coldchain_influx" },
+          "query": "from(bucket: \"coldchain\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"telemetry\" and r._field == \"humidity\") |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false) |> group(columns: [\"shipment_id\"])"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Trạng thái cửa (0=đóng, 1=mở)",
+      "type": "state-timeline",
+      "datasource": { "type": "influxdb", "uid": "coldchain_influx" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "fillOpacity": 80 },
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "Đóng", "color": "green" }, "1": { "text": "Mở", "color": "red" } } }
+          ]
+        },
+        "overrides": []
+      },
+      "options": { "showValue": "auto", "mergeValues": true },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "influxdb", "uid": "coldchain_influx" },
+          "query": "from(bucket: \"coldchain\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"telemetry\" and r._field == \"door_open\") |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false) |> group(columns: [\"shipment_id\"])"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Mức pin theo shipment (%)",
+      "type": "timeseries",
+      "datasource": { "type": "influxdb", "uid": "coldchain_influx" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent", "min": 0, "max": 100,
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10 },
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "green", "value": 20 } ] }
+        },
+        "overrides": []
+      },
+      "options": { "tooltip": { "mode": "multi" }, "legend": { "displayMode": "list", "placement": "bottom" } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "influxdb", "uid": "coldchain_influx" },
+          "query": "from(bucket: \"coldchain\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"telemetry\" and r._field == \"battery_percent\") |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false) |> group(columns: [\"shipment_id\"])"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Số lần vi phạm nhiệt độ",
+      "type": "stat",
+      "datasource": { "type": "influxdb", "uid": "coldchain_influx" },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 16 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short", "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "orange", "value": 1 }, { "color": "red", "value": 5 } ] }
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "none", "textMode": "value" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "influxdb", "uid": "coldchain_influx" },
+          "query": "from(bucket: \"coldchain\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"events\" and r._field == \"value\" and r.event_type == \"temperature_violation\") |> sum()"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Trạng thái làm lạnh & báo động",
+      "type": "state-timeline",
+      "datasource": { "type": "influxdb", "uid": "coldchain_influx" },
+      "gridPos": { "h": 8, "w": 16, "x": 8, "y": 16 },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "fillOpacity": 80 },
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "OFF", "color": "gray" }, "1": { "text": "NORMAL", "color": "green" }, "2": { "text": "HIGH", "color": "blue" } } }
+          ]
+        },
+        "overrides": []
+      },
+      "options": { "showValue": "auto", "mergeValues": true },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "influxdb", "uid": "coldchain_influx" },
+          "query": "from(bucket: \"coldchain\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"actuator_status\" and (r._field == \"cooling_unit\" or r._field == \"alarm\")) |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false) |> group(columns: [\"shipment_id\", \"_field\"])"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Nhật ký sự kiện gần nhất",
+      "type": "table",
+      "datasource": { "type": "influxdb", "uid": "coldchain_influx" },
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 24 },
+      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "options": { "showHeader": true },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "influxdb", "uid": "coldchain_influx" },
+          "query": "from(bucket: \"coldchain\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"events\" and r._field == \"value\") |> keep(columns: [\"_time\", \"shipment_id\", \"event_type\", \"severity\"]) |> sort(columns: [\"_time\"], desc: true) |> limit(n: 50)"
+        }
+      ]
+    }
+  ]
+}
