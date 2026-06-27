@@ -1,0 +1,8 @@
+# Agent config
+.agent/
+
+# Documentation / plans
+docs/
+
+# Worktrees
+.worktrees/
