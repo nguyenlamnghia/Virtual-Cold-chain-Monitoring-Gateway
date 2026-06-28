@@ -1,6 +1,3 @@
-"""Entrypoint coldchain-gateway: MQTT loop + offline checker.
-Viết cho paho-mqtt 1.6.1 (chữ ký callback cũ: on_connect(client, userdata, flags, rc)).
-"""
 import json
 import logging
 import threading
@@ -25,13 +22,12 @@ class ColdchainGateway:
         self.store = StateStore()
         self.rules = RuleEngine(CONFIG)
         self.influx = InfluxWriter(CONFIG)
-        # paho-mqtt 1.6.1: khởi tạo Client không cần CallbackAPIVersion
+
         self.client = mqtt.Client(client_id="coldchain-gateway")
         self.client.on_connect = self._on_connect
         self.client.on_message = self._on_message
         self._stop = threading.Event()
 
-    # ---------- MQTT callbacks (chữ ký paho 1.6.1) ----------
     def _on_connect(self, client, userdata, flags, rc):
         if rc == 0:
             log.info("Đã kết nối MQTT broker %s:%s",
