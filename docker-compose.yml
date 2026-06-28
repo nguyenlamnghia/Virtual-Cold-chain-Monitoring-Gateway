@@ -17,9 +17,8 @@ services:
     image: redis:7
     container_name: redis
     restart: unless-stopped
-    # chỉ dùng nội bộ, không cần map ra host; bỏ comment dưới nếu muốn debug
-    # ports:
-    #   - "6379:6379"
+    ports:
+      - "6379:6379"
     networks:
       - coldchain-net
 
@@ -59,7 +58,9 @@ services:
       INFLUXDB_TOKEN: ${INFLUXDB_TOKEN}
     volumes:
       - grafana-data:/var/lib/grafana
-      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
     depends_on:
       - influxdb
     networks:
@@ -77,6 +78,11 @@ services:
       DEVICE_ID: device-01
       SCENARIO: temp_rising         # kịch bản: nhiệt độ tăng dần (R1+R2)
       TELEMETRY_INTERVAL: ${TELEMETRY_INTERVAL}
+      DOOR_OPEN_CYCLES: ${DOOR_OPEN_CYCLES}
+      TEMP_MAX: ${TEMP_MAX}
+      TEMP_VIOLATION_CYCLES: ${TEMP_VIOLATION_CYCLES}
+      OVERTEMP_MIN_CYCLES: ${OVERTEMP_MIN_CYCLES:-5}
+      OVERTEMP_MAX_CYCLES: ${OVERTEMP_MAX_CYCLES:-8}
     depends_on:
       - mosquitto
     networks:
@@ -93,6 +99,11 @@ services:
       DEVICE_ID: device-02
       SCENARIO: door_open           # kịch bản: cửa mở (R3)
       TELEMETRY_INTERVAL: ${TELEMETRY_INTERVAL}
+      DOOR_OPEN_CYCLES: ${DOOR_OPEN_CYCLES}
+      TEMP_MAX: ${TEMP_MAX}
+      TEMP_VIOLATION_CYCLES: ${TEMP_VIOLATION_CYCLES}
+      OVERTEMP_MIN_CYCLES: ${OVERTEMP_MIN_CYCLES:-5}
+      OVERTEMP_MAX_CYCLES: ${OVERTEMP_MAX_CYCLES:-8}
     depends_on:
       - mosquitto
     networks:
@@ -109,6 +120,11 @@ services:
       DEVICE_ID: device-03
       SCENARIO: battery_drain       # kịch bản: pin cạn + offline (R4+R5)
       TELEMETRY_INTERVAL: ${TELEMETRY_INTERVAL}
+      DOOR_OPEN_CYCLES: ${DOOR_OPEN_CYCLES}
+      TEMP_MAX: ${TEMP_MAX}
+      TEMP_VIOLATION_CYCLES: ${TEMP_VIOLATION_CYCLES}
+      OVERTEMP_MIN_CYCLES: ${OVERTEMP_MIN_CYCLES:-5}
+      OVERTEMP_MAX_CYCLES: ${OVERTEMP_MAX_CYCLES:-8}
     depends_on:
       - mosquitto
     networks:

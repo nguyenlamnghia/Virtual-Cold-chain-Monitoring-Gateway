@@ -1,47 +1,46 @@
 import os
 from dataclasses import dataclass
 
+
 def _get_str(key: str, default: str) -> str:
-    val = os.environ.get(key)
-    return val if val not in (None, "") else default
+    value = os.getenv(key)
+    return value if value not in (None, "") else default
+
 
 def _get_int(key: str, default: int) -> int:
     try:
-        return int(os.environ.get(key, default))
+        return int(os.getenv(key, str(default)))
     except (TypeError, ValueError):
         return default
+
 
 def _get_float(key: str, default: float) -> float:
     try:
-        return float(os.environ.get(key, default))
+        return float(os.getenv(key, str(default)))
     except (TypeError, ValueError):
         return default
 
+
 @dataclass(frozen=True)
 class Config:
-    # ----- MQTT -----
     mqtt_broker: str = _get_str("MQTT_BROKER", "mosquitto")
     mqtt_port: int = _get_int("MQTT_PORT", 1883)
     mqtt_keepalive: int = _get_int("MQTT_KEEPALIVE", 60)
 
-    # ----- InfluxDB -----
     influx_url: str = _get_str("INFLUXDB_URL", "http://influxdb:8086")
     influx_org: str = _get_str("INFLUXDB_ORG", "hust")
     influx_bucket: str = _get_str("INFLUXDB_BUCKET", "coldchain")
     influx_token: str = _get_str("INFLUXDB_TOKEN", "")
 
-    # ----- Redis -----
     redis_host: str = _get_str("REDIS_HOST", "redis")
     redis_port: int = _get_int("REDIS_PORT", 6379)
 
-    # ----- rule engine -----
     temp_max: float = _get_float("TEMP_MAX", 8.0)
     temp_violation_cycles: int = _get_int("TEMP_VIOLATION_CYCLES", 3)
     door_open_cycles: int = _get_int("DOOR_OPEN_CYCLES", 2)
     battery_min: float = _get_float("BATTERY_MIN", 20.0)
     offline_timeout: int = _get_int("OFFLINE_TIMEOUT", 30)
 
-    # ----- gateway -----
     offline_check_interval: int = _get_int("OFFLINE_CHECK_INTERVAL", 5)
     events_keep: int = _get_int("EVENTS_KEEP", 50)
     log_level: str = _get_str("LOG_LEVEL", "INFO")
@@ -52,7 +51,6 @@ class Config:
     def command_topic(self, shipment_id: str) -> str:
         return f"coldchain/{shipment_id}/actuator/command"
 
-	# ----- gw ghi envent/status vào db mà, có pub/sub đâu mà cần topic -----
     def event_topic(self, shipment_id: str) -> str:
         return f"coldchain/{shipment_id}/gateway/event"
 
@@ -65,5 +63,6 @@ class Config:
             f"DOOR_CYCLES={self.door_open_cycles} BAT_MIN={self.battery_min} "
             f"OFFLINE={self.offline_timeout}s"
         )
+
 
 CONFIG = Config()

@@ -14,13 +14,15 @@ docker compose up -d --build
 ```
 
 Sau khi chạy, bạn có thể truy cập:
-- **Grafana:** `http://localhost:3000` (admin/admin)
+- **Grafana:** `http://localhost:3000` (tài khoản lấy từ
+  `GF_SECURITY_ADMIN_USER` / `GF_SECURITY_ADMIN_PASSWORD` trong `.env`)
 - **REST API (Swagger UI):** `http://localhost:8000/docs`
 
 ## Các kịch bản giả lập (M3)
 
 - `shipment-device-01`: Kịch bản `temp_rising` (Nhiệt độ tăng dần).
-- `shipment-device-02`: Kịch bản `door_open` (Cửa mở liên tục).
+- `shipment-device-02`: Kịch bản `door_open` (cửa mở càng lâu thì tải nhiệt
+  tăng dần; cooling actuator phản hồi khi vượt ngưỡng).
 - `shipment-device-03`: Kịch bản `battery_drain` (Pin tụt nhanh dẫn đến offline).
 
 ## Cấu trúc thư mục

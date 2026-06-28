@@ -1,0 +1,722 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "id": 1,
+      "title": "Temperature by shipment",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
+      "datasource": {
+        "type": "influxdb",
+        "uid": "influxdb"
+      },
+      "targets": [
+        {
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and r._field == \"temperature\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"mean\")",
+          "refId": "A",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influxdb"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 2,
+      "title": "Humidity by shipment",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      },
+      "datasource": {
+        "type": "influxdb",
+        "uid": "influxdb"
+      },
+      "targets": [
+        {
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and r._field == \"humidity\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"mean\")",
+          "refId": "A",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influxdb"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 3,
+      "title": "Door open status",
+      "type": "state-timeline",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 16
+      },
+      "datasource": {
+        "type": "influxdb",
+        "uid": "influxdb"
+      },
+      "targets": [
+        {
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and r._field == \"door_open\")\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)\n  |> yield(name: \"last\")",
+          "refId": "A",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influxdb"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "options": {
+                "0": {
+                  "color": "green",
+                  "text": "Closed"
+                },
+                "1": {
+                  "color": "red",
+                  "text": "Open"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "max": 1,
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 4,
+      "title": "Battery level",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 16
+      },
+      "datasource": {
+        "type": "influxdb",
+        "uid": "influxdb"
+      },
+      "targets": [
+        {
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and r._field == \"battery_percent\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"mean\")",
+          "refId": "A",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influxdb"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 5,
+      "title": "Cumulative temperature violation count",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 16
+      },
+      "datasource": {
+        "type": "influxdb",
+        "uid": "influxdb"
+      },
+      "targets": [
+        {
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"events\" and r.event_type == \"temperature_violation\" and r._field == \"value\")\n  |> aggregateWindow(every: v.windowPeriod, fn: sum, createEmpty: false)\n  |> cumulativeSum(columns: [\"_value\"])\n  |> yield(name: \"cumulative\")",
+          "refId": "A",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influxdb"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 6,
+      "title": "Cooling unit status",
+      "type": "state-timeline",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 24
+      },
+      "datasource": {
+        "type": "influxdb",
+        "uid": "influxdb"
+      },
+      "targets": [
+        {
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"actuator_status\" and r._field == \"cooling_unit\")\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)\n  |> yield(name: \"last\")",
+          "refId": "A",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influxdb"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "options": {
+                "0": {
+                  "color": "blue",
+                  "text": "Off"
+                },
+                "1": {
+                  "color": "green",
+                  "text": "Normal"
+                },
+                "2": {
+                  "color": "red",
+                  "text": "High"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "max": 2,
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 7,
+      "title": "Alarm status",
+      "type": "state-timeline",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 24
+      },
+      "datasource": {
+        "type": "influxdb",
+        "uid": "influxdb"
+      },
+      "targets": [
+        {
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"actuator_status\" and r._field == \"alarm\")\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)\n  |> yield(name: \"last\")",
+          "refId": "A",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influxdb"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "options": {
+                "0": {
+                  "color": "green",
+                  "text": "Off"
+                },
+                "1": {
+                  "color": "red",
+                  "text": "On"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "max": 1,
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 8,
+      "title": "Recent event details",
+      "type": "table",
+      "gridPos": {
+        "h": 10,
+        "w": 16,
+        "x": 8,
+        "y": 32
+      },
+      "datasource": {
+        "type": "influxdb",
+        "uid": "influxdb"
+      },
+      "targets": [
+        {
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"events\" and r._field == \"event_info\")\n  |> group()\n  |> sort(columns: [\"_time\"], desc: true)\n  |> limit(n: 50)\n  |> keep(columns: [\"_time\", \"shipment_id\", \"severity\", \"event_type\", \"_value\"])\n  |> rename(columns: {_time: \"Time\", shipment_id: \"Shipment\", severity: \"Severity\", event_type: \"Event type\", _value: \"Information\"})\n  |> yield(name: \"recent_events\")",
+          "refId": "A",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influxdb"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Severity"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "options": {
+                      "critical": {
+                        "color": "red",
+                        "text": "CRITICAL"
+                      },
+                      "info": {
+                        "color": "blue",
+                        "text": "INFO"
+                      },
+                      "warning": {
+                        "color": "orange",
+                        "text": "WARNING"
+                      }
+                    },
+                    "type": "value"
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Information"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 520
+              }
+            ]
+          }
+        ]
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {},
+            "includeByName": {},
+            "indexByName": {
+              "Event type": 3,
+              "Information": 4,
+              "Severity": 2,
+              "Shipment": 1,
+              "Time": 0
+            },
+            "renameByName": {}
+          }
+        }
+      ],
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true
+      }
+    },
+    {
+      "id": 9,
+      "title": "Shipment status overview",
+      "type": "table",
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "datasource": {
+        "type": "influxdb",
+        "uid": "influxdb"
+      },
+      "targets": [
+        {
+          "query": "telemetry = from(bucket: v.defaultBucket)\n  |> range(start: -24h)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and contains(value: r._field, set: [\"temperature\", \"humidity\", \"door_open\", \"battery_percent\"]))\n  |> pivot(rowKey: [\"_time\", \"shipment_id\", \"device_id\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> group(columns: [\"shipment_id\"])\n  |> sort(columns: [\"_time\"], desc: true)\n  |> limit(n: 1)\n  |> rename(columns: {_time: \"last_seen\"})\n\nactuator = from(bucket: v.defaultBucket)\n  |> range(start: -24h)\n  |> filter(fn: (r) => r._measurement == \"actuator_status\" and contains(value: r._field, set: [\"cooling_unit\", \"alarm\"]))\n  |> pivot(rowKey: [\"_time\", \"shipment_id\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> group(columns: [\"shipment_id\"])\n  |> sort(columns: [\"_time\"], desc: true)\n  |> limit(n: 1)\n  |> drop(columns: [\"_time\"])\n\njoin(tables: {telemetry: telemetry, actuator: actuator}, on: [\"shipment_id\"])\n  |> map(fn: (r) => ({r with overall_status: if uint(v: now()) - uint(v: r.last_seen) > uint(v: 30s) then \"OFFLINE\" else if r.temperature > 8.0 then \"CRITICAL\" else if r.door_open == 1 or r.alarm == 1 or r.battery_percent < 20.0 or r.cooling_unit == 2 then \"WARNING\" else \"NORMAL\"}))\n  |> keep(columns: [\"shipment_id\", \"device_id\", \"overall_status\", \"temperature\", \"humidity\", \"door_open\", \"battery_percent\", \"cooling_unit\", \"alarm\", \"last_seen\"])\n  |> group()\n  |> sort(columns: [\"shipment_id\"])\n  |> yield(name: \"shipment_overview\")",
+          "refId": "A",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influxdb"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Status"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "options": {
+                      "CRITICAL": {
+                        "color": "red",
+                        "text": "CRITICAL"
+                      },
+                      "NORMAL": {
+                        "color": "green",
+                        "text": "NORMAL"
+                      },
+                      "OFFLINE": {
+                        "color": "dark-gray",
+                        "text": "OFFLINE"
+                      },
+                      "WARNING": {
+                        "color": "orange",
+                        "text": "WARNING"
+                      }
+                    },
+                    "type": "value"
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Temperature"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "celsius"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Humidity"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Battery"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Door"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "options": {
+                      "0": {
+                        "color": "green",
+                        "text": "Closed"
+                      },
+                      "1": {
+                        "color": "red",
+                        "text": "Open"
+                      }
+                    },
+                    "type": "value"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Cooling"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "options": {
+                      "0": {
+                        "color": "blue",
+                        "text": "Off"
+                      },
+                      "1": {
+                        "color": "green",
+                        "text": "Normal"
+                      },
+                      "2": {
+                        "color": "red",
+                        "text": "High"
+                      }
+                    },
+                    "type": "value"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Alarm"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "options": {
+                      "0": {
+                        "color": "green",
+                        "text": "Off"
+                      },
+                      "1": {
+                        "color": "red",
+                        "text": "On"
+                      }
+                    },
+                    "type": "value"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {},
+            "includeByName": {},
+            "indexByName": {
+              "alarm": 8,
+              "battery_percent": 6,
+              "cooling_unit": 7,
+              "device_id": 1,
+              "door_open": 5,
+              "humidity": 4,
+              "last_seen": 9,
+              "overall_status": 2,
+              "shipment_id": 0,
+              "temperature": 3
+            },
+            "renameByName": {
+              "alarm": "Alarm",
+              "battery_percent": "Battery",
+              "cooling_unit": "Cooling",
+              "device_id": "Device",
+              "door_open": "Door",
+              "humidity": "Humidity",
+              "last_seen": "Last telemetry",
+              "overall_status": "Status",
+              "shipment_id": "Shipment",
+              "temperature": "Temperature"
+            }
+          }
+        }
+      ],
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true
+      }
+    },
+    {
+      "id": 10,
+      "title": "Event count by type",
+      "type": "bargauge",
+      "gridPos": {
+        "h": 10,
+        "w": 8,
+        "x": 0,
+        "y": 32
+      },
+      "datasource": {
+        "type": "influxdb",
+        "uid": "influxdb"
+      },
+      "targets": [
+        {
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"events\" and r._field == \"value\")\n  |> group(columns: [\"event_type\", \"severity\"])\n  |> count(column: \"_value\")\n  |> keep(columns: [\"event_type\", \"severity\", \"_value\"])\n  |> yield(name: \"event_count\")",
+          "refId": "A",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influxdb"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 3
+              },
+              {
+                "color": "red",
+                "value": 6
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "displayMode": "gradient",
+        "maxVizHeight": 300,
+        "minVizHeight": 16,
+        "minVizWidth": 8,
+        "namePlacement": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": true,
+        "sizing": "auto",
+        "text": {},
+        "valueMode": "color"
+      }
+    }
+  ],
+  "refresh": "5s",
+  "schemaVersion": 39,
+  "tags": [
+    "iot",
+    "coldchain",
+    "mqtt",
+    "influxdb"
+  ],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Virtual Cold-chain Monitoring Gateway",
+  "uid": "coldchain-dashboard",
+  "version": 1,
+  "weekStart": ""
+}

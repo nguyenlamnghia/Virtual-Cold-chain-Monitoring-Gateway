@@ -1,159 +1,214 @@
-"""Quản lý trạng thái đa chu kỳ per-shipment + đồng bộ Redis.
-Là nơi hiện thực tiêu chí 1.4đ: 'gateway theo dõi trạng thái qua nhiều chu kỳ'.
-"""
+import copy
 import json
 import logging
 import threading
 import time
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field, fields
 from datetime import datetime, timezone
+from typing import Callable, Dict, List, Optional, Tuple
 
 import redis
 
-from config import CONFIG
+try:
+    from .config import CONFIG
+except ImportError:  # Running as /app/state.py in the container.
+    from config import CONFIG
+
 
 log = logging.getLogger("gateway.state")
 
-def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
 
-def _as_float(v):
+def utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _as_float(value):
     try:
-        return float(v)
+        return float(value)
     except (TypeError, ValueError):
         return None
+
 
 @dataclass
 class ShipmentState:
     shipment_id: str
     device_id: str = ""
-    # --- Giá trị đo mới nhất ---
-    last_temperature: float | None = None
-    last_humidity: float | None = None
-    battery_percent: float | None = None
+    last_temperature: Optional[float] = None
+    last_humidity: Optional[float] = None
+    battery_percent: Optional[float] = None
     door_open: bool = False
-    # --- Bộ đếm đa chu kỳ (TRÁI TIM của 1.4đ) ---
     high_temp_streak: int = 0
     door_open_streak: int = 0
-    # --- Trạng thái actuator (cập nhật từ status) ---
-    cooling_unit: str = "normal"   # off / normal / high
+    cooling_unit: str = "normal"
     alarm: bool = False
-    # --- Cờ dedup: mỗi vi phạm chỉ bắn event 1 lần ---
     temp_violation_active: bool = False
     door_alarm_active: bool = False
     battery_low_active: bool = False
     offline_active: bool = False
-    # --- Theo dõi vòng đời ---
     online: bool = True
     last_telemetry_ts: float = field(default_factory=time.time)
     cycles: int = 0
     last_event: str = ""
-    updated_at: str = field(default_factory=_now_iso)
+    updated_at: str = field(default_factory=utc_now)
 
-    def to_redis_dict(self) -> dict:
-        d = asdict(self)
-        d["last_telemetry_iso"] = datetime.fromtimestamp(
+    def to_redis_dict(self) -> Dict:
+        data = asdict(self)
+        data["last_telemetry_iso"] = datetime.fromtimestamp(
             self.last_telemetry_ts, tz=timezone.utc
-        ).isoformat()
-        return d
+        ).isoformat().replace("+00:00", "Z")
+        return data
+
 
 class StateStore:
-    """Giữ state của mọi shipment trong RAM + đồng bộ Redis (thread-safe)."""
-
-    def __init__(self):
-        self._states: dict[str, ShipmentState] = {}
-        self._lock = threading.Lock()
-        self._redis = redis.Redis(
-            host=CONFIG.redis_host,
-            port=CONFIG.redis_port,
+    def __init__(self, cfg=CONFIG, redis_client=None):
+        self.cfg = cfg
+        self._states: Dict[str, ShipmentState] = {}
+        self._lock = threading.RLock()
+        self._redis = redis_client or redis.Redis(
+            host=cfg.redis_host,
+            port=cfg.redis_port,
             decode_responses=True,
+            socket_connect_timeout=2,
+            socket_timeout=2,
         )
+        self._restore_from_redis()
 
-    # ---------- Truy cập ----------
+    def _restore_from_redis(self) -> None:
+        """Restore current state so a gateway restart does not erase streaks."""
+        try:
+            shipment_ids = self._redis.smembers("shipments:index")
+            allowed = {item.name for item in fields(ShipmentState)}
+            for shipment_id in shipment_ids:
+                raw = self._redis.get(f"shipment:{shipment_id}:state")
+                if not raw:
+                    continue
+                data = json.loads(raw)
+                state_data = {key: value for key, value in data.items() if key in allowed}
+                state_data["shipment_id"] = shipment_id
+                self._states[shipment_id] = ShipmentState(**state_data)
+            if shipment_ids:
+                log.info("Restored %d shipment state(s) from Redis", len(self._states))
+        except (redis.RedisError, ValueError, TypeError) as exc:
+            log.warning("Could not restore state from Redis: %s", exc)
+
+    def _get_unlocked(self, shipment_id: str) -> ShipmentState:
+        state = self._states.get(shipment_id)
+        if state is None:
+            state = ShipmentState(shipment_id=shipment_id)
+            self._states[shipment_id] = state
+        return state
+
     def get(self, shipment_id: str) -> ShipmentState:
         with self._lock:
-            st = self._states.get(shipment_id)
-            if st is None:
-                st = ShipmentState(shipment_id=shipment_id)
-                self._states[shipment_id] = st
-            return st
+            return copy.deepcopy(self._get_unlocked(shipment_id))
 
-    def snapshot(self) -> list[ShipmentState]:
-        """Bản sao danh sách state để offline checker quét an toàn."""
+    def snapshot(self) -> List[ShipmentState]:
         with self._lock:
-            return list(self._states.values())
+            return copy.deepcopy(list(self._states.values()))
 
-    # ---------- Cập nhật từ telemetry (đếm streak ở đây) ----------
-    def update_from_telemetry(self, shipment_id: str, payload: dict) -> ShipmentState:
+    def _apply_telemetry(self, state: ShipmentState, payload: Dict) -> None:
+        state.device_id = str(payload.get("device_id", state.device_id))
+        state.last_temperature = _as_float(payload.get("temperature"))
+        state.last_humidity = _as_float(payload.get("humidity"))
+        state.battery_percent = _as_float(payload.get("battery_percent"))
+        state.door_open = payload.get("door_open", False) is True
+
+        if state.last_temperature is not None and state.last_temperature > self.cfg.temp_max:
+            state.high_temp_streak += 1
+        else:
+            state.high_temp_streak = 0
+
+        if state.door_open:
+            state.door_open_streak += 1
+        else:
+            state.door_open_streak = 0
+
+        state.last_telemetry_ts = time.time()
+        state.online = True
+        state.offline_active = False
+        state.cycles += 1
+        state.updated_at = utc_now()
+        log.info(
+            "[%s] cycle=%d temp=%s temp_streak=%d door=%s door_streak=%d batt=%s",
+            state.shipment_id,
+            state.cycles,
+            state.last_temperature,
+            state.high_temp_streak,
+            state.door_open,
+            state.door_open_streak,
+            state.battery_percent,
+        )
+
+    def process_telemetry(
+        self,
+        shipment_id: str,
+        payload: Dict,
+        evaluator: Callable[[ShipmentState], Tuple[List[Dict], List[Dict]]],
+    ) -> Tuple[ShipmentState, List[Dict], List[Dict]]:
+        """Update counters and evaluate rules under the same lock."""
         with self._lock:
-            st = self._states.setdefault(
-                shipment_id, ShipmentState(shipment_id=shipment_id)
-            )
-            st.device_id = payload.get("device_id", st.device_id)
-            temp = _as_float(payload.get("temperature"))
-            st.last_temperature = temp
-            st.last_humidity = _as_float(payload.get("humidity"))
-            st.battery_percent = _as_float(payload.get("battery_percent"))
-            st.door_open = bool(payload.get("door_open", False))
+            state = self._get_unlocked(shipment_id)
+            self._apply_telemetry(state, payload)
+            commands, events = evaluator(state)
+            return copy.deepcopy(state), commands, events
 
-            # ===== Đếm streak đa chu kỳ =====
-            if temp is not None and temp > CONFIG.temp_max:
-                st.high_temp_streak += 1
-            else:
-                st.high_temp_streak = 0
-
-            if st.door_open:
-                st.door_open_streak += 1
-            else:
-                st.door_open_streak = 0
-
-            st.last_telemetry_ts = time.time()
-            st.online = True
-            st.offline_active = False  # nhận telemetry => không còn offline
-            st.cycles += 1
-            st.updated_at = _now_iso()
-
-            log.info(
-                "[%s] cycle=%d temp=%s temp_streak=%d door=%s door_streak=%d batt=%s",
-                shipment_id, st.cycles, st.last_temperature,
-                st.high_temp_streak, st.door_open,
-                st.door_open_streak, st.battery_percent,
-            )
-            return st
-
-    # ---------- Cập nhật từ actuator status ----------
-    def update_from_status(self, shipment_id: str, payload: dict) -> ShipmentState:
+    def update_from_telemetry(self, shipment_id: str, payload: Dict) -> ShipmentState:
         with self._lock:
-            st = self._states.setdefault(
-                shipment_id, ShipmentState(shipment_id=shipment_id)
-            )
-            st.cooling_unit = payload.get("cooling_unit", st.cooling_unit)
-            st.alarm = bool(payload.get("alarm", st.alarm))
-            st.updated_at = _now_iso()
-            return st
+            state = self._get_unlocked(shipment_id)
+            self._apply_telemetry(state, payload)
+            return copy.deepcopy(state)
 
-    # ---------- Ghi Redis ----------
+    def update_from_status(self, shipment_id: str, payload: Dict) -> ShipmentState:
+        with self._lock:
+            state = self._get_unlocked(shipment_id)
+            state.cooling_unit = str(payload.get("cooling_unit", state.cooling_unit))
+            alarm = payload.get("alarm", state.alarm)
+            state.alarm = alarm if isinstance(alarm, bool) else str(alarm).lower() == "on"
+            state.updated_at = utc_now()
+            return copy.deepcopy(state)
+
+    def check_offline(
+        self,
+        now: float,
+        evaluator: Callable[[ShipmentState, float], List[Dict]],
+    ) -> List[Tuple[str, List[Dict]]]:
+        results = []
+        with self._lock:
+            for state in self._states.values():
+                events = evaluator(state, now)
+                if events:
+                    results.append((state.shipment_id, events))
+        return results
+
     def sync_redis(self, shipment_id: str) -> None:
-        st = self.get(shipment_id)
+        state = self.get(shipment_id)
         try:
-            self._redis.set(
+            pipeline = self._redis.pipeline()
+            pipeline.set(
                 f"shipment:{shipment_id}:state",
-                json.dumps(st.to_redis_dict(), ensure_ascii=False),
+                json.dumps(state.to_redis_dict(), ensure_ascii=False),
             )
-            self._redis.sadd("shipments:index", shipment_id)
-        except redis.RedisError as e:
-            log.warning("Redis sync state lỗi (%s): %s", shipment_id, e)
+            pipeline.sadd("shipments:index", shipment_id)
+            pipeline.execute()
+        except redis.RedisError as exc:
+            log.warning("Redis state sync failed for %s: %s", shipment_id, exc)
 
-    def push_event(self, shipment_id: str, event: dict) -> None:
-        """Lưu event vào Redis list (LPUSH + LTRIM giữ N event gần nhất)."""
+    def push_event(self, shipment_id: str, event: Dict) -> None:
         with self._lock:
-            st = self._states.setdefault(
-                shipment_id, ShipmentState(shipment_id=shipment_id)
-            )
-            st.last_event = event.get("event_type", "")
+            state = self._get_unlocked(shipment_id)
+            state.last_event = str(event.get("event_type", ""))
+            state.updated_at = utc_now()
         try:
             key = f"shipment:{shipment_id}:events"
-            self._redis.lpush(key, json.dumps(event, ensure_ascii=False))
-            self._redis.ltrim(key, 0, CONFIG.events_keep - 1)
-        except redis.RedisError as e:
-            log.warning("Redis push event lỗi (%s): %s", shipment_id, e)
+            pipeline = self._redis.pipeline()
+            pipeline.lpush(key, json.dumps(event, ensure_ascii=False))
+            pipeline.ltrim(key, 0, max(1, self.cfg.events_keep) - 1)
+            pipeline.execute()
+        except redis.RedisError as exc:
+            log.warning("Redis event push failed for %s: %s", shipment_id, exc)
+
+    def redis_available(self) -> bool:
+        try:
+            return bool(self._redis.ping())
+        except redis.RedisError:
+            return False

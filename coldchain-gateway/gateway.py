@@ -58,11 +58,10 @@ class ColdchainGateway:
 
     # ---------- Xử lý telemetry ----------
     def _handle_telemetry(self, shipment_id, payload):
-        self.store.update_from_telemetry(shipment_id, payload)
+        _, commands, events = self.store.process_telemetry(
+            shipment_id, payload, self.rules.evaluate
+        )
         self.influx.write_telemetry(shipment_id, payload)
-
-        st = self.store.get(shipment_id)
-        commands, events = self.rules.evaluate(st)
         self._dispatch(shipment_id, commands, events)
         self.store.sync_redis(shipment_id)
 
@@ -93,11 +92,10 @@ class ColdchainGateway:
     def _offline_loop(self):
         while not self._stop.is_set():
             now = time.time()
-            for st in self.store.snapshot():
-                events = self.rules.check_offline(st, now)
-                if events:
-                    self._dispatch(st.shipment_id, [], events)
-                    self.store.sync_redis(st.shipment_id)
+            offline_events = self.store.check_offline(now, self.rules.check_offline)
+            for shipment_id, events in offline_events:
+                self._dispatch(shipment_id, [], events)
+                self.store.sync_redis(shipment_id)
             self._stop.wait(self.cfg.offline_check_interval)
 
     @staticmethod
