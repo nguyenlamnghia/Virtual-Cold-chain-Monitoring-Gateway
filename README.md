@@ -68,7 +68,7 @@ lại status này để mô phỏng tác động thực của cooling lên nhi�
 ## 4. Cấu hình môi trường
 
 Docker Compose tự động đọc file `.env`; không cần thêm `--env-file`.
-File `.env` chứa credential thật và đã được bỏ qua bởi Git. Khi clone project
+File `.env` đã được gitignore. Khi clone project
 mới và chưa có `.env`, khởi tạo một lần:
 
 ```bash
