@@ -3,10 +3,10 @@
 Hệ thống mô phỏng giám sát chuỗi lạnh bằng Docker Compose, MQTT, Python,
 Redis, InfluxDB, Grafana và FastAPI.
 
-- **M1 – Infrastructure:** Mosquitto, Redis, InfluxDB, Grafana.
-- **M2 – Gateway:** quản lý state đa chu kỳ, chạy Rule Engine R1–R6, ghi
+- **Người 1 - M1 – Infrastructure:** Mosquitto, Redis, InfluxDB, Grafana.
+- **Người 2 M2 – Gateway:** quản lý state đa chu kỳ, chạy Rule Engine R1–R6, ghi
   InfluxDB/Redis và phát command MQTT.
-- **M3 – Edge & API:** ba Shipment Device, ba Cooling Actuator và REST API.
+- **Người 3 M3 – Edge & API:** ba Shipment Device, ba Cooling Actuator và REST API.
 
 ## 1. Kiến trúc
 
@@ -132,9 +132,7 @@ docker compose down -v
 - REST API Swagger: `http://localhost:8000/docs`.
 - REST API health: `http://localhost:8000/health`.
 
-Tài khoản InfluxDB và Grafana lấy từ các biến `INFLUXDB_USERNAME`,
-`INFLUXDB_PASSWORD`, `GF_SECURITY_ADMIN_USER` và
-`GF_SECURITY_ADMIN_PASSWORD` trong `.env`.
+Tài khoản InfluxDB và Grafana lấy từ các biến trong env. Khi triển khai thực tế cần mã hóa thay vì viết thẳng trong file môi trường.
 
 ## 7. MQTT topic và message
 
