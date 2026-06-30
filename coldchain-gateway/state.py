@@ -38,6 +38,7 @@ class ShipmentState:
     battery_percent: Optional[float] = None
     door_open: bool = False
     high_temp_streak: int = 0
+    temperature_high_active: bool = False
     door_open_streak: int = 0
     cooling_unit: str = "normal"
     alarm: bool = False
@@ -63,7 +64,7 @@ class StateStore:
     def __init__(self, cfg=CONFIG, redis_client=None):
         self.cfg = cfg
         self._states: Dict[str, ShipmentState] = {}
-        self._lock = threading.RLock()
+        self._lock = threading.RLock() # tao rlock
         self._redis = redis_client or redis.Redis(
             host=cfg.redis_host,
             port=cfg.redis_port,
@@ -91,6 +92,7 @@ class StateStore:
         except (redis.RedisError, ValueError, TypeError) as exc:
             log.warning("Could not restore state from Redis: %s", exc)
 
+#tìm shipment; nếu chưa tồn tại thì tự tạo state mặc định.
     def _get_unlocked(self, shipment_id: str) -> ShipmentState:
         state = self._states.get(shipment_id)
         if state is None:
@@ -98,6 +100,7 @@ class StateStore:
             self._states[shipment_id] = state
         return state
 
+    # chong xung dot thread
     def get(self, shipment_id: str) -> ShipmentState:
         with self._lock:
             return copy.deepcopy(self._get_unlocked(shipment_id))
@@ -113,7 +116,19 @@ class StateStore:
         state.battery_percent = _as_float(payload.get("battery_percent"))
         state.door_open = payload.get("door_open", False) is True
 
-        if state.last_temperature is not None and state.last_temperature > self.cfg.temp_max:
+        if (
+            state.last_temperature is not None
+            and state.last_temperature >= self.cfg.temp_upper
+        ):
+            state.temperature_high_active = True
+        elif (
+            state.last_temperature is not None
+            and state.last_temperature <= self.cfg.temp_lower
+        ):
+            state.temperature_high_active = False
+
+        # Trong vùng hysteresis, giữ nguyên trạng thái quá nhiệt trước đó.
+        if state.temperature_high_active:
             state.high_temp_streak += 1
         else:
             state.high_temp_streak = 0

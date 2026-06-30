@@ -84,6 +84,7 @@ Các biến nghiệp vụ chính:
 |---|---:|---|
 | `TELEMETRY_INTERVAL` | `5` | Chu kỳ telemetry, tính bằng giây |
 | `TEMP_MAX` | `8` | Ngưỡng nhiệt độ |
+| `TEMP_MARGIN` | `0.1` | Biên hysteresis quanh ngưỡng nhiệt độ |
 | `TEMP_VIOLATION_CYCLES` | `3` | Số chu kỳ quá nhiệt để phát R1 |
 | `OVERTEMP_MIN_CYCLES` | `5` | Thời gian quá nhiệt mô phỏng tối thiểu |
 | `OVERTEMP_MAX_CYCLES` | `8` | Thời gian quá nhiệt mô phỏng tối đa |
@@ -202,9 +203,12 @@ Gateway event:
 
 ## 8. Rule Engine R1–R6
 
-- **R1:** khi `temperature > TEMP_MAX` đủ `TEMP_VIOLATION_CYCLES`, phát
+- **R1:** sau khi `temperature >= TEMP_MAX + TEMP_MARGIN`, trạng thái quá nhiệt
+  được giữ cho tới khi nhiệt độ xuống `<= TEMP_MAX - TEMP_MARGIN`; nếu trạng thái
+  này kéo dài đủ `TEMP_VIOLATION_CYCLES`, phát
   `temperature_violation` một lần cho mỗi đợt vi phạm.
-- **R2:** khi `temperature > TEMP_MAX` và cooling chưa `high`, gửi
+- **R2:** khi nhiệt độ chạm ngưỡng bật `TEMP_MAX + TEMP_MARGIN` và cooling chưa
+  `high`, gửi
   `increase_power` ngay lập tức.
 - **R3:** khi cửa mở đủ `DOOR_OPEN_CYCLES`, phát `door_open_alarm` và
   gửi `alarm_on`; khi cửa đóng lại thì gửi `alarm_off`.
@@ -212,8 +216,9 @@ Gateway event:
   cho tới khi pin phục hồi.
 - **R5:** khi không có telemetry quá `OFFLINE_TIMEOUT`, phát
   `device_offline`.
-- **R6:** khi nhiệt độ về `<= TEMP_MAX`, gửi `normal_power`; nếu đang có
-  vi phạm nhiệt thì phát thêm event `recovered`.
+- **R6:** khi nhiệt độ về `<= TEMP_MAX - TEMP_MARGIN`, gửi `normal_power`; nếu
+  đang có vi phạm nhiệt thì phát thêm event `recovered`. Trong vùng hysteresis,
+  mặc định 7,9–8,1°C, hệ thống giữ nguyên trạng thái trước đó.
 
 Gateway lưu state theo từng shipment, chống phát event lặp và khôi phục
 state từ Redis sau khi restart.

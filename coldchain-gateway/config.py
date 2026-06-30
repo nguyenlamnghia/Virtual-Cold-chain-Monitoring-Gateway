@@ -36,6 +36,7 @@ class Config:
     redis_port: int = _get_int("REDIS_PORT", 6379)
 
     temp_max: float = _get_float("TEMP_MAX", 8.0)
+    temp_margin: float = _get_float("TEMP_MARGIN", 0.1)
     temp_violation_cycles: int = _get_int("TEMP_VIOLATION_CYCLES", 3)
     door_open_cycles: int = _get_int("DOOR_OPEN_CYCLES", 2)
     battery_min: float = _get_float("BATTERY_MIN", 20.0)
@@ -48,6 +49,16 @@ class Config:
     topic_telemetry: str = "coldchain/+/device/telemetry"
     topic_status: str = "coldchain/+/actuator/status"
 
+    @property
+    def temp_upper(self) -> float:
+        """Temperature that activates the over-temperature state."""
+        return round(self.temp_max + max(0.0, self.temp_margin), 10)
+
+    @property
+    def temp_lower(self) -> float:
+        """Temperature that clears the over-temperature state."""
+        return round(self.temp_max - max(0.0, self.temp_margin), 10)
+
     def command_topic(self, shipment_id: str) -> str:
         return f"coldchain/{shipment_id}/actuator/command"
 
@@ -59,7 +70,8 @@ class Config:
             f"MQTT={self.mqtt_broker}:{self.mqtt_port} | "
             f"Influx={self.influx_url}({self.influx_org}/{self.influx_bucket}) | "
             f"Redis={self.redis_host}:{self.redis_port} | "
-            f"TEMP_MAX={self.temp_max} TEMP_CYCLES={self.temp_violation_cycles} "
+            f"TEMP_MAX={self.temp_max} TEMP_MARGIN=±{max(0.0, self.temp_margin)} "
+            f"TEMP_CYCLES={self.temp_violation_cycles} "
             f"DOOR_CYCLES={self.door_open_cycles} BAT_MIN={self.battery_min} "
             f"OFFLINE={self.offline_timeout}s"
         )

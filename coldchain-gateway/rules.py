@@ -56,10 +56,10 @@ class RuleEngine:
         events: List[Dict] = []
         temperature = state.last_temperature
 
-        # R2: react immediately, but do not repeat once status reports HIGH.
+        # R2: activate at TEMP_MAX + margin and stay active through the dead band.
         if (
             temperature is not None
-            and temperature > self.cfg.temp_max
+            and state.temperature_high_active
             and state.cooling_unit != "high"
         ):
             commands.append(
@@ -67,7 +67,7 @@ class RuleEngine:
                     state.shipment_id,
                     "cooling_unit",
                     "increase_power",
-                    f"temp {temperature}C > TEMP_MAX {self.cfg.temp_max}C",
+                    f"temp {temperature}C >= ngưỡng bật {self.cfg.temp_upper}C",
                 )
             )
             log.info("[%s] R2 increase_power (temp=%s)", state.shipment_id, temperature)
@@ -88,6 +88,9 @@ class RuleEngine:
                         "temperature": temperature,
                         "streak": state.high_temp_streak,
                         "threshold": self.cfg.temp_max,
+                        "trigger_threshold": self.cfg.temp_upper,
+                        "recovery_threshold": self.cfg.temp_lower,
+                        "margin": max(0.0, self.cfg.temp_margin),
                     },
                 )
             )
@@ -100,7 +103,7 @@ class RuleEngine:
         # R6: return cooling to normal whenever temperature is safe. This also
         # clears a stale HIGH status after a device restart before R1 fired.
         temperature_is_safe = (
-            temperature is not None and temperature <= self.cfg.temp_max
+            temperature is not None and temperature <= self.cfg.temp_lower
         )
         if temperature_is_safe and (
             state.temp_violation_active or state.cooling_unit == "high"
@@ -110,7 +113,7 @@ class RuleEngine:
                     state.shipment_id,
                     "cooling_unit",
                     "normal_power",
-                    f"temp {temperature}C <= TEMP_MAX {self.cfg.temp_max}C (hồi phục)",
+                    f"temp {temperature}C <= ngưỡng hồi phục {self.cfg.temp_lower}C",
                 )
             )
 
@@ -122,7 +125,12 @@ class RuleEngine:
                     "recovered",
                     "info",
                     "Nhiệt độ trở lại bình thường",
-                    {"temperature": temperature, "threshold": self.cfg.temp_max},
+                    {
+                        "temperature": temperature,
+                        "threshold": self.cfg.temp_max,
+                        "recovery_threshold": self.cfg.temp_lower,
+                        "margin": max(0.0, self.cfg.temp_margin),
+                    },
                 )
             )
             log.info("[%s] R6 recovered (temp=%s)", state.shipment_id, temperature)
